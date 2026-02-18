@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Optional
 from fastapi import FastAPI
 
 from investigator.repository.incident_repo import SqlIncidentRepository
-from investigator.api.routes import approvals, events, health, investigate, observability
+from investigator.api.routes import approvals, events, feedback, health, investigate, observability
 
 if TYPE_CHECKING:
     from investigator.observability.metrics import MetricsRegistry
@@ -39,5 +39,6 @@ def create_app(
     app.include_router(investigate.router)
     app.include_router(observability.router)
     app.include_router(approvals.router)
+    app.include_router(feedback.router)
 
     return app
