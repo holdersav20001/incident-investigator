@@ -1,6 +1,6 @@
 # Project Status — Autonomous Data Incident Investigator
 
-## Current Week: 5
+## Current Week: 6
 
 ## Progress
 
@@ -8,7 +8,7 @@
 - [x] Week 2 — Data Ingestion Pipeline
 - [x] Week 3 — AI/LLM Integration
 - [x] Week 4 — Agent Orchestration
-- [ ] Week 5 — Observability & Monitoring
+- [x] Week 5 — Observability & Monitoring
 - [ ] Week 6 — API & Integration Layer
 - [ ] Week 7 — Testing, Quality & Security
 - [ ] Week 8 — Deployment & Production Readiness
@@ -16,6 +16,16 @@
 ---
 
 ## Summaries
+
+## Week 5 Summary
+
+Delivered the full observability & monitoring layer using TDD (263 tests, all green):
+
+- **Structured logger** (`src/investigator/observability/logger.py`) — `PipelineLogger` emitting structured log records per step (step_start, step_success, step_error, pipeline_complete) with incident_id, step, duration_ms, outcome extras; pipeline integration hooks emit these automatically
+- **MetricsRegistry** (`src/investigator/observability/metrics.py`) — in-memory `Counter` (labeled/unlabeled), `Histogram` (count/mean/p50/p95/p99), and `MetricsRegistry.snapshot()`; pipeline `run()` records `pipeline_runs_total`, `pipeline_errors_total`, `simulation_failures_total`, `pipeline_step_duration_ms`
+- **SLO checker** (`src/investigator/observability/slo.py`) — `SLODefinition` + `SLOChecker` evaluating `pipeline_success_rate ≥ 0.95` and `simulation_safe_rate ≥ 0.90`; `STANDARD_SLOS` constant for reuse
+- **Observability API** — `GET /metrics` (counter + histogram snapshot), `GET /health` enhanced with DB ping and SLO evaluation (status/db/slos response model)
+- Committed in 4 incremental commits (3ff97e0→d7242b1)
 
 ## Week 1 Summary
 
