@@ -83,3 +83,39 @@ class TransitionRow(Base):
     actor: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
 
     incident: Mapped["IncidentRow"] = relationship(back_populates="transitions")
+
+
+class ApprovalRow(Base):
+    """Human approval queue — one record per incident that requires review."""
+
+    __tablename__ = "approvals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    incident_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("incidents.incident_id"), nullable=False, unique=True, index=True
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False)  # pending|approved|rejected
+    required_role: Mapped[str] = mapped_column(String(200), nullable=False)
+    reviewer: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    reviewer_note: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    incident: Mapped["IncidentRow"] = relationship()
+
+
+class FeedbackRow(Base):
+    """Outcome feedback from engineers — learning loop signal."""
+
+    __tablename__ = "feedback"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    incident_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("incidents.incident_id"), nullable=False, index=True
+    )
+    outcome: Mapped[str] = mapped_column(String(20), nullable=False)  # fixed|not_fixed|unknown
+    overrides: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    reviewer_notes: Mapped[Optional[str]] = mapped_column(String(4000), nullable=True)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    incident: Mapped["IncidentRow"] = relationship()
