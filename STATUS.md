@@ -1,6 +1,6 @@
 # Project Status — Autonomous Data Incident Investigator
 
-## Current Week: 9
+## Current Week: 10
 
 ## Progress
 
@@ -12,10 +12,24 @@
 - [x] Week 6 — API & Integration Layer
 - [x] Week 7 — Testing, Quality & Security
 - [x] Week 8 — Deployment & Production Readiness
+- [x] Week 9 — Infrastructure Convergence (Integration Tests + Dev Scripts)
 
 ---
 
 ## Summaries
+
+## Week 9 Summary
+
+Delivered Infrastructure Convergence using TDD (526 unit tests + 23 integration tests, all green):
+
+- **testcontainers integration** (`pyproject.toml`) — added `testcontainers[postgres]>=4.4`; `integration` pytest marker excluded from default addopts so unit tests run without Docker; opt-in via `pytest -m integration`
+- **Integration test infrastructure** (`tests/integration/conftest.py`) — session-scoped `PostgresContainer(postgres:16-alpine)`; auto-skips when Docker unavailable; `pg_engine` creates schema via `Base.metadata.create_all`; `pg_session` rolls back after each test
+- **DB connection smoke tests** (`tests/integration/test_db_connection.py`) — 6 tests: container reachable, Postgres 16 version, all 5 tables present, PK on `incident_id`, unique on `approvals.incident_id` (checking both named constraints and unique indexes for Postgres compatibility)
+- **Full lifecycle integration tests** (`tests/integration/test_postgres_flow.py`) — 14 tests: ingest, state transitions, approval queue, feedback; function-scoped repo fixture to prevent `PendingRollbackError` session poisoning after intentional duplicate-PK raise
+- **Alembic on real Postgres tests** (`tests/integration/test_postgres_migrations.py`) — 5 tests: upgrade head, downgrade to base, upgrade after downgrade, idempotent upgrade, JSONB column round-trip; `_full_drop()` drops `alembic_version` between tests for clean state; `CAST(:cls AS jsonb)` instead of `:cls::jsonb` to avoid psycopg2 parameter-parsing ambiguity
+- **dev_up.ps1 / dev_down.ps1** (`scripts/`) — one-command dev stack lifecycle; `dev_up.ps1` starts Postgres, waits for healthcheck, runs `alembic upgrade head`; `dev_down.ps1` stops stack with optional `--volumes`
+- **verify.ps1** (`scripts/verify.ps1`) — end-to-end verification: compose up → alembic → unit tests → integration tests; `-SkipIntegration` and `-SkipCompose` flags; exits 1 on first failure; 19 structural tests validate all steps present and guarded correctly
+- Committed in 3 incremental commits (ac3849a→f8ec58d)
 
 ## Week 8 Summary
 
