@@ -17,10 +17,17 @@ _SNIPPET_LIMIT = 2000
 
 class LocalFileEvidenceProvider(EvidenceProvider):
     def __init__(self, root: Path) -> None:
-        self._root = root
+        self._root = root.resolve()
 
     def fetch(self, *, job_name: str, incident_id: str) -> list[EvidenceRef]:
-        job_dir = self._root / job_name
+        # Resolve the candidate directory and verify it stays inside the root.
+        # A job_name like "../../etc" would otherwise escape to the filesystem.
+        job_dir = (self._root / job_name).resolve()
+        try:
+            job_dir.relative_to(self._root)
+        except ValueError:
+            # Path traversal attempt — silently return no evidence
+            return []
         if not job_dir.is_dir():
             return []
 
