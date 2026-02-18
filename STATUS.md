@@ -1,6 +1,6 @@
 # Project Status — Autonomous Data Incident Investigator
 
-## Current Week: 6
+## Current Week: 7
 
 ## Progress
 
@@ -9,13 +9,25 @@
 - [x] Week 3 — AI/LLM Integration
 - [x] Week 4 — Agent Orchestration
 - [x] Week 5 — Observability & Monitoring
-- [ ] Week 6 — API & Integration Layer
+- [x] Week 6 — API & Integration Layer
 - [ ] Week 7 — Testing, Quality & Security
 - [ ] Week 8 — Deployment & Production Readiness
 
 ---
 
 ## Summaries
+
+## Week 6 Summary
+
+Delivered the full API & Integration Layer using TDD (326 tests, all green):
+
+- **ApprovalRow + FeedbackRow ORM** (`src/investigator/db/models.py`) — `approvals` and `feedback` tables with reviewer/outcome fields; 5 new repository methods: `create_approval_queue_item`, `list_pending_approvals`, `get_approval`, `record_approval_decision` (transitions incident state), `create_feedback`, `list_feedback`, `list_incidents` (paginated with status filter)
+- **Approval queue API** (`src/investigator/api/routes/approvals.py`) — `GET /approvals/pending`, `POST /approvals/{id}/approve`, `POST /approvals/{id}/reject`; reviewer decision transitions incident through the state machine
+- **Feedback API** (`src/investigator/api/routes/feedback.py`) — `POST /incidents/{id}/feedback` with OutcomeType validation, 201 on success, 404 for unknown incidents
+- **List incidents** (`GET /incidents`) — paginated with `?status=`, `?limit=`, `?offset=` query params; returns IncidentListItem list sorted by created_at desc
+- **Global error envelope** (`app.py`) — all HTTP and validation errors now return `{error, message, trace_id, details?}` matching `contracts.md` Contract 11
+- **OpenAPI spec tests** — 15 tests assert every contracted route is present in `/openapi.json`; acts as a route regression guard
+- Committed in 5 incremental commits (fa6ef3e→ce5110e)
 
 ## Week 5 Summary
 
