@@ -16,6 +16,7 @@ Design principles:
 
 from __future__ import annotations
 
+import time
 from uuid import UUID
 
 from investigator.approval.policy import ApprovalDecision, ApprovalPolicy
@@ -31,6 +32,7 @@ from investigator.remediation.planner import RemediationPlanner
 from investigator.remediation.simulator import PlanSimulator
 from investigator.repository.incident_repo import SqlIncidentRepository
 from investigator.risk.engine import RiskEngine
+from investigator.observability.logger import PipelineLogger
 from investigator.state import IncidentStatus
 from investigator.workflow.result import PipelineResult
 
@@ -98,15 +100,37 @@ class InvestigationPipeline:
         if row.risk:
             result.risk = RiskAssessment.model_validate(row.risk)
 
+        pl = PipelineLogger(incident_id=str(incident_id))
+        t_pipeline = time.perf_counter()
+        current_step = "unknown"
+        t_step = t_pipeline
+
         try:
-            result = self._step_classify(result, event)
-            result = self._step_diagnose(result, event)
-            result = self._step_remediate(result, event)
-            result = self._step_risk(result, event)
-            result = self._step_approve(result)
+            for step_name, step_fn in [
+                ("classify",  lambda r: self._step_classify(r, event)),
+                ("diagnose",  lambda r: self._step_diagnose(r, event)),
+                ("remediate", lambda r: self._step_remediate(r, event)),
+                ("risk",      lambda r: self._step_risk(r, event)),
+                ("approve",   lambda r: self._step_approve(r)),
+            ]:
+                current_step = step_name
+                pl.step_start(step_name)
+                t_step = time.perf_counter()
+                result = step_fn(result)
+                pl.step_success(step_name, duration_ms=(time.perf_counter() - t_step) * 1000)
+
         except Exception as exc:  # noqa: BLE001
             result.error = f"{type(exc).__name__}: {exc}"
+            pl.step_error(
+                current_step,
+                error=str(exc),
+                duration_ms=(time.perf_counter() - t_step) * 1000,
+            )
 
+        pl.pipeline_complete(
+            final_status=result.final_status,
+            total_duration_ms=(time.perf_counter() - t_pipeline) * 1000,
+        )
         return result
 
     # ------------------------------------------------------------------
