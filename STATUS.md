@@ -1,6 +1,6 @@
 # Project Status — Autonomous Data Incident Investigator
 
-## Current Week: 8
+## Current Week: 9
 
 ## Progress
 
@@ -11,11 +11,25 @@
 - [x] Week 5 — Observability & Monitoring
 - [x] Week 6 — API & Integration Layer
 - [x] Week 7 — Testing, Quality & Security
-- [ ] Week 8 — Deployment & Production Readiness
+- [x] Week 8 — Deployment & Production Readiness
 
 ---
 
 ## Summaries
+
+## Week 8 Summary
+
+Delivered Deployment & Production Readiness using TDD (507 tests, all green):
+
+- **Settings** (`src/investigator/config.py`) — `Settings(BaseSettings)` with pydantic-settings; DATABASE_URL, APP_ENV, LOG_LEVEL, EVIDENCE_ROOT, LLM_PROVIDER, ANTHROPIC_API_KEY; LOG_LEVEL normalised to uppercase; `is_postgres`/`is_production`/`is_development` properties; 22 tests
+- **AnthropicLLMProvider** (`src/investigator/llm/anthropic_provider.py`) — real Anthropic Messages API integration; response_model JSON schema injected into system prompt; validates response with Pydantic; raises on empty key / invalid JSON / schema mismatch; 10 tests
+- **Production entrypoint** (`main.py`) — wires full stack from Settings; selects LLM provider from `LLM_PROVIDER` env var; `Base.metadata.create_all` for dev convenience; Alembic for production
+- **Alembic migrations** (`alembic/`) — `alembic.ini`, `env.py` (DATABASE_URL env-var override, fileConfig guarded during pytest), `versions/001_initial_schema.py` (5 tables, indexes, unique constraint); upgrade + downgrade tested; 11 migration tests
+- **Dockerfile** — multi-stage build (builder installs deps; runtime Python 3.11-slim, non-root USER, EXPOSE 8000, /data/evidence volume)
+- **docker-compose.yml** — `api` + `db` (postgres:16-alpine) services; `api` depends_on db healthcheck; named volumes for DB and evidence data
+- **.env.example** — all env vars documented with inline comments; no real secrets
+- **GitHub Actions CI** (`.github/workflows/ci.yml`) — `test` job (matrix Python 3.11/3.12, pytest) + `lint` job (ruff check + format); triggers on push/PR; 34 deployment config validation tests (Dockerfile structure, compose topology, env example, CI triggers/jobs)
+- Committed in 4 incremental commits (ddbe5fb→af67650)
 
 ## Week 7 Summary
 
