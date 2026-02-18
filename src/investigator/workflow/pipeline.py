@@ -33,6 +33,7 @@ from investigator.remediation.simulator import PlanSimulator
 from investigator.repository.incident_repo import SqlIncidentRepository
 from investigator.risk.engine import RiskEngine
 from investigator.observability.logger import PipelineLogger
+from investigator.observability.metrics import MetricsRegistry
 from investigator.state import IncidentStatus
 from investigator.workflow.result import PipelineResult
 
@@ -63,12 +64,19 @@ class InvestigationPipeline:
     # Public API
     # ------------------------------------------------------------------
 
-    def run(self, *, incident_id: UUID) -> PipelineResult:
+    def run(
+        self,
+        *,
+        incident_id: UUID,
+        metrics: MetricsRegistry | None = None,
+    ) -> PipelineResult:
         """Run (or resume) the investigation pipeline for the given incident.
 
         Returns a PipelineResult capturing every step's output.
         If any step fails the result carries `error` and the incident
         retains its last successfully-persisted status.
+
+        Pass a MetricsRegistry to record pipeline counters and step durations.
         """
         row = self._repo.get_incident(incident_id)
         if row is None:
@@ -105,6 +113,9 @@ class InvestigationPipeline:
         current_step = "unknown"
         t_step = t_pipeline
 
+        if metrics:
+            metrics.counter("pipeline_runs_total").inc()
+
         try:
             for step_name, step_fn in [
                 ("classify",  lambda r: self._step_classify(r, event)),
@@ -117,7 +128,10 @@ class InvestigationPipeline:
                 pl.step_start(step_name)
                 t_step = time.perf_counter()
                 result = step_fn(result)
-                pl.step_success(step_name, duration_ms=(time.perf_counter() - t_step) * 1000)
+                duration_ms = (time.perf_counter() - t_step) * 1000
+                pl.step_success(step_name, duration_ms=duration_ms)
+                if metrics:
+                    metrics.histogram("pipeline_step_duration_ms").observe(duration_ms)
 
         except Exception as exc:  # noqa: BLE001
             result.error = f"{type(exc).__name__}: {exc}"
@@ -126,11 +140,19 @@ class InvestigationPipeline:
                 error=str(exc),
                 duration_ms=(time.perf_counter() - t_step) * 1000,
             )
+            if metrics:
+                metrics.counter("pipeline_errors_total").inc()
 
+        total_ms = (time.perf_counter() - t_pipeline) * 1000
         pl.pipeline_complete(
             final_status=result.final_status,
-            total_duration_ms=(time.perf_counter() - t_pipeline) * 1000,
+            total_duration_ms=total_ms,
         )
+        if metrics:
+            metrics.histogram("pipeline_total_duration_ms").observe(total_ms)
+            metrics.counter("pipeline_final_status_total").inc(
+                labels={"status": result.final_status}
+            )
         return result
 
     # ------------------------------------------------------------------
