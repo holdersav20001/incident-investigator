@@ -1,13 +1,13 @@
 # Project Status — Autonomous Data Incident Investigator
 
-## Current Week: 4
+## Current Week: 5
 
 ## Progress
 
 - [x] Week 1 — Foundation & Architecture
 - [x] Week 2 — Data Ingestion Pipeline
 - [x] Week 3 — AI/LLM Integration
-- [ ] Week 4 — Agent Orchestration
+- [x] Week 4 — Agent Orchestration
 - [ ] Week 5 — Observability & Monitoring
 - [ ] Week 6 — API & Integration Layer
 - [ ] Week 7 — Testing, Quality & Security
@@ -26,6 +26,19 @@ Delivered the full project foundation using TDD (75 tests, all green):
 - **State machine** (`src/investigator/state/machine.py`) — `IncidentStatus` enum + deterministic `transition()` guard; only allowlisted `(from, to)` pairs are permitted
 - **Rules classifier** (`src/investigator/classification/rules.py`) — keyword-based `RulesClassifier` covering 5 incident categories with confidence scoring and unknown fallback
 - Committed: `386d9d4`
+
+## Week 4 Summary
+
+Delivered the agent orchestration layer using TDD (202 tests, all green):
+
+- **InvestigationPipeline** (`src/investigator/workflow/pipeline.py`) — sequences Classify→Diagnose→Remediate→Simulate→Risk→Approve; guards on current status so re-runs skip completed steps (resumable from any intermediate state)
+- **PipelineResult** (`src/investigator/workflow/result.py`) — typed output capturing every step's artefact and final status; `error` field populated on partial failure
+- **Fault-tolerant execution** — LLM failures are caught; incident stays at last good status; artefacts already persisted are preserved; resume with a working pipeline to continue
+- **Approval routing** — auto_approve→APPROVED, human_review→APPROVAL_REQUIRED (with role), reject→APPROVAL_REQUIRED→REJECTED
+- **Risk engine calibration** — prod weight +20→+30 so production incidents always reach MEDIUM threshold and require human review
+- **5 evaluation scenarios** — schema_mismatch/dev→auto_approve, schema_mismatch/prod→on_call_engineer, timeout/prod→review, unknown/prod→review, unsafe_sql→reject
+- **API endpoints** — `POST /incidents/{id}/investigate` + `GET /incidents/{id}` with pipeline injected via app state
+- Committed in 4 incremental commits (bf7e881→5257d0d)
 
 ## Week 3 Summary
 
