@@ -1,0 +1,25 @@
+[2026-02-18 06:00:01,002] INFO  - dbt run --models +fact_sales_daily --target prod
+[2026-02-18 06:00:01,120] INFO  - dbt version 1.7.4 | profiles: prod (redshift, threads=8)
+[2026-02-18 06:00:01,543] INFO  - Found 47 models, 183 tests, 12 sources, 3 snapshots
+[2026-02-18 06:00:02,891] INFO  - model.analytics.stg_raw_sales ................... OK  (12.4s) | rows=284,931
+[2026-02-18 06:00:15,302] INFO  - model.analytics.int_sales_enriched .............. OK  (8.1s)  | rows=284,931
+[2026-02-18 06:00:23,411] INFO  - model.analytics.fact_sales_daily ................ OK  (31.7s) | rows=284,931
+[2026-02-18 06:00:55,129] INFO  - Running schema + data tests...
+[2026-02-18 06:00:55,189] INFO  - test.analytics.not_null_fact_sales_daily_sale_id .... PASS
+[2026-02-18 06:00:55,209] INFO  - test.analytics.not_null_fact_sales_daily_product_id . FAIL [1,243 rows]
+[2026-02-18 06:00:55,210] ERROR - Test: not_null_fact_sales_daily_product_id
+  Failing row count : 1,243 (of 284,931 total — 0.44%)
+  Sample failing rows:
+    sale_id=TXN-20260218-00041  product_id=NULL  customer_id=CUST-8821  amount=49.99   payment_method=KLARNA
+    sale_id=TXN-20260218-00089  product_id=NULL  customer_id=CUST-3341  amount=12.50   payment_method=KLARNA
+    sale_id=TXN-20260218-00112  product_id=NULL  customer_id=CUST-9982  amount=199.00  payment_method=KLARNA
+    sale_id=TXN-20260218-00203  product_id=NULL  customer_id=CUST-1144  amount=75.00   payment_method=KLARNA
+    sale_id=TXN-20260218-00341  product_id=NULL  customer_id=CUST-5523  amount=33.00   payment_method=KLARNA
+  Pattern: ALL 1,243 failures have payment_method = 'KLARNA'
+  Non-KLARNA rows: 0 failures (283,688 rows clean)
+[2026-02-18 06:00:55,311] INFO  - Tracing upstream: stg_raw_sales ← raw.raw_sales (loaded 2026-02-18 05:47:22 UTC)
+[2026-02-18 06:00:55,312] INFO  - Upstream pipeline: payments_api_ingest | last run: 2026-02-18 05:45:01 | status: PARTIAL_SUCCESS
+[2026-02-18 06:00:55,313] INFO  - payments_api_ingest log note: "Klarna webhook payload v2 missing product_id field — API change deployed by Klarna 2026-02-18 04:00 UTC"
+[2026-02-18 06:00:55,314] ERROR - dbt run FAILED: 1 test failed, 0 models failed
+[2026-02-18 06:00:55,315] INFO  - Downstream models skipped: [mart_revenue_daily, rpt_sales_by_product]
+[2026-02-18 06:00:55,316] INFO  - Suggested fix: contact Klarna support re: webhook v2 product_id omission, or apply NULL coalesce from product lookup table using klarna_order_id

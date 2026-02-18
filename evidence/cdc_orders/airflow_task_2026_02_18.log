@@ -1,0 +1,37 @@
+[2026-02-18 09:23:41,892] INFO  - Airflow task: cdc_orders.extract_and_load | run_id=scheduled__2026-02-18T09:00:00
+[2026-02-18 09:23:42,104] INFO  - Connecting to source: kafka://prod-kafka-broker-01:9092 | topic=orders_cdc_v2 | consumer_group=cdc_orders_prod
+[2026-02-18 09:23:42,310] INFO  - Source schema detected:
+  root
+   |-- order_id:   string    (nullable = false)
+   |-- user_id:    long      (nullable = false)
+   |-- product_id: string    (nullable = true)
+   |-- amount:     decimal(12,2) (nullable = false)
+   |-- created_at: timestamp (nullable = false)
+   |-- updated_at: timestamp (nullable = false)
+[2026-02-18 09:23:42,891] INFO  - Records read from Kafka: 48,291 (offsets 8842910 → 8891200)
+[2026-02-18 09:23:43,120] INFO  - Connecting to target: redshift://prod-redshift.cluster.us-east-1.redshift.amazonaws.com/analytics.orders_staging
+[2026-02-18 09:23:43,891] INFO  - Target schema retrieved from Redshift:
+  root
+   |-- order_id:   varchar(36)    (nullable = false)
+   |-- product_id: varchar(36)    (nullable = true)
+   |-- amount:     numeric(12,2)  (nullable = false)
+   |-- created_at: timestamptz    (nullable = false)
+   |-- updated_at: timestamptz    (nullable = false)
+[2026-02-18 09:23:44,012] ERROR - Schema validation FAILED
+[2026-02-18 09:23:44,013] ERROR - Column mismatch detected between source and target:
+  MISSING in target : user_id (long, non-nullable)
+  EXTRA in target   : (none)
+  Source column count : 6
+  Target column count : 5
+[2026-02-18 09:23:44,014] ERROR - Cannot map non-nullable source column 'user_id' — no matching column in analytics.orders_staging
+[2026-02-18 09:23:44,015] ERROR - pyspark.sql.utils.AnalysisException:
+    Resolved attribute(s) user_id#42L missing from
+    order_id#38, product_id#39, amount#40, created_at#41, updated_at#43
+    in operator !Project [order_id#38, user_id#42L, product_id#39, amount#40, created_at#41, updated_at#43]
+    at org.apache.spark.sql.catalyst.analysis.CheckAnalysis.failAnalysis(CheckAnalysis.scala:50)
+    at org.apache.spark.sql.catalyst.analysis.CheckAnalysis$$anonfun$checkAnalysis$1.apply(CheckAnalysis.scala:452)
+[2026-02-18 09:23:44,201] INFO  - Task duration: 2.3 seconds | Status: FAILED
+[2026-02-18 09:23:44,202] INFO  - Downstream tasks blocked: [load_orders_staging, update_orders_dim, refresh_sales_mart]
+[2026-02-18 09:23:44,210] INFO  - Last successful run: 2026-02-17 09:23:41 (yesterday — schema change introduced today)
+[2026-02-18 09:23:44,211] INFO  - Git blame: analytics.orders_staging last altered by migration M-20260218-001 (deploy at 09:10 UTC)
+[2026-02-18 09:23:44,212] INFO  - SLA breach alert sent to #data-platform-alerts

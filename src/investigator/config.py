@@ -36,9 +36,11 @@ class Settings(BaseSettings):
     EVIDENCE_ROOT: str = "./evidence"
 
     # ---- LLM ----
-    LLM_PROVIDER: str = "mock"       # "mock" (CI/dev) or "anthropic" (production)
+    LLM_PROVIDER: str = "mock"       # "mock" | "anthropic" | "openrouter"
     ANTHROPIC_API_KEY: str = ""
     LLM_MODEL: str = "claude-haiku-4-5-20251001"
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_MODEL: str = "openai/gpt-4o-mini:free"
 
     # ---- Normalise log level so "debug" and "DEBUG" are both valid ----
     @field_validator("LOG_LEVEL", mode="before")

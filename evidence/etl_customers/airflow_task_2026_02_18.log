@@ -1,0 +1,35 @@
+[2026-02-18 11:45:02,331] INFO  - Airflow task: etl_customers.transform_and_load | run_id=scheduled__2026-02-18T11:30:00
+[2026-02-18 11:45:02,450] INFO  - Connecting to source: postgresql://prod-db-primary.internal:5432/transactional
+[2026-02-18 11:45:02,451] INFO  - Executing transformation query:
+  SELECT
+      c.customer_id,
+      c.email,
+      c.country,
+      c.signup_date,
+      SUM(o.amount)      AS lifetime_value,
+      COUNT(o.order_id)  AS order_count,
+      MAX(o.created_at)  AS last_order_date
+  FROM customers c
+  LEFT JOIN orders o ON c.customer_id = o.customer_id
+  WHERE c.is_deleted = false
+  GROUP BY c.customer_id, c.email, c.country, c.signup_date
+[2026-02-18 11:45:02,521] INFO  - EXPLAIN output:
+  Hash Left Join  (cost=248392.10..4847392.45 rows=12483920 width=64)
+    Hash Cond: (o.customer_id = c.customer_id)
+    ->  Seq Scan on orders  (cost=0.00..1923847.71 rows=89432871 width=24)
+    ->  Hash  (cost=184201.20..184201.20 rows=12483920 width=48)
+          ->  Seq Scan on customers  (cost=0.00..184201.20 rows=12483920 width=48)
+                Filter: (is_deleted = false)
+[2026-02-18 11:45:02,522] WARNING - Sequential scan on orders (89,432,871 rows) — missing index on orders.customer_id
+[2026-02-18 11:45:02,523] WARNING - Estimated runtime 87 min exceeds task timeout of 60 min
+[2026-02-18 11:45:02,524] INFO  - pg_stat_user_tables: orders last vacuumed 14 days ago, dead tuples=4,821,003
+[2026-02-18 11:45:02,525] INFO  - Proceeding anyway (no pre-flight abort configured)
+[2026-02-18 12:45:02,931] ERROR - psycopg2.OperationalError: canceling statement due to statement timeout
+    DETAIL: Query exceeded statement_timeout=3600000ms
+    CONTEXT: while reading tuple (1827492,34) in relation "orders"
+[2026-02-18 12:45:02,932] ERROR - Query killed after 3600.6 seconds
+[2026-02-18 12:45:02,933] INFO  - Records written to staging before timeout: 2,847,103 / 12,483,920 (22.8%)
+[2026-02-18 12:45:02,934] INFO  - Partial data written to analytics.customers_staging — table is now in INCONSISTENT state
+[2026-02-18 12:45:03,001] ERROR - Downstream tasks blocked: [fact_customer_metrics, dim_customers, customer_ltv_model]
+[2026-02-18 12:45:03,002] INFO  - Index recommendation: CREATE INDEX CONCURRENTLY idx_orders_customer_id ON orders(customer_id)
+[2026-02-18 12:45:03,003] INFO  - Alternative: add partition pruning — orders table partitioned by created_at, query has no date filter

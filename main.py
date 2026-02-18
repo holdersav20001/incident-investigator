@@ -47,8 +47,52 @@ def _build_llm(settings: Settings) -> LLMProvider:
             api_key=settings.ANTHROPIC_API_KEY,
             model=settings.LLM_MODEL,
         )
-    # Default: mock provider (safe for CI and development)
-    return MockLLMProvider(responses={})
+    if settings.LLM_PROVIDER == "openrouter":
+        from investigator.llm.openrouter_provider import OpenRouterLLMProvider  # noqa: PLC0415
+        return OpenRouterLLMProvider(
+            api_key=settings.OPENROUTER_API_KEY,
+            model=settings.OPENROUTER_MODEL,
+        )
+    # Default: mock provider with plausible stub responses so the full
+    # pipeline completes end-to-end without an API key.  Set
+    # LLM_PROVIDER=anthropic + ANTHROPIC_API_KEY for real AI analysis.
+    from investigator.models.diagnosis import DiagnosisResult  # noqa: PLC0415
+    from investigator.models.remediation import (  # noqa: PLC0415
+        PlanStep, PlanTool, RemediationPlan, RollbackStep,
+    )
+    mock_diagnosis = DiagnosisResult(
+        root_cause=(
+            "Automated diagnosis unavailable (mock LLM). "
+            "Set LLM_PROVIDER=anthropic and ANTHROPIC_API_KEY for AI-powered root-cause analysis."
+        ),
+        evidence=[],
+        confidence=0.5,
+        next_checks=[
+            "Review job logs for the full stack trace",
+            "Check upstream data sources for recent schema changes",
+            "Verify pipeline configuration and dependency versions",
+        ],
+    )
+    mock_remediation = RemediationPlan(
+        plan=[
+            PlanStep(
+                step="Notify on-call engineer of the incident",
+                tool=PlanTool.notify,
+                command="notify oncall 'Incident requires manual investigation'",
+            ),
+            PlanStep(
+                step="Review and triage job logs",
+                tool=PlanTool.rerun_job,
+                command="rerun_job --dry-run --verbose",
+            ),
+        ],
+        rollback=[RollbackStep(step="No automated rollback — manual review required")],
+        expected_time_minutes=30,
+    )
+    return MockLLMProvider(responses={
+        DiagnosisResult: mock_diagnosis,
+        RemediationPlan: mock_remediation,
+    })
 
 
 def build_app(settings: Settings | None = None):
