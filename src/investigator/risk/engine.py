@@ -5,7 +5,7 @@ that can be traced in the rationale string.
 
 Scoring factors (each contributes points to risk_score 0–100):
   - simulation failed:              +40
-  - production environment:         +20
+  - production environment:         +30  (≥MEDIUM alone — prod always gets a human look)
   - staging environment:            +10
   - low diagnosis confidence (<0.5):+15
   - long remediation time (>60m):   +10
@@ -50,8 +50,8 @@ class RiskEngine:
         # Environment weight
         env = environment.lower()
         if env == "prod":
-            score += 20
-            factors.append("env=prod(+20)")
+            score += 30
+            factors.append("env=prod(+30)")
         elif env == "staging":
             score += 10
             factors.append("env=staging(+10)")
