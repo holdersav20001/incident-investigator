@@ -303,6 +303,10 @@ class InvestigationPipeline:
             self._repo.update_approval_status(
                 result.incident_id, f"pending:{decision.required_role}"
             )
+            self._repo.create_approval_queue_item(
+                result.incident_id,
+                required_role=decision.required_role or "on_call_engineer",
+            )
             result.final_status = IncidentStatus.APPROVAL_REQUIRED
 
         return result

@@ -91,9 +91,7 @@ def pending_incident_id(client_and_repo):
     }
     client.post("/events/ingest", json=event)
     client.post(f"/incidents/{incident_id}/investigate")
-    # Create approval queue entry to simulate what the pipeline would do
-    from uuid import UUID as _UUID
-    repo.create_approval_queue_item(_UUID(incident_id), required_role="on_call_engineer")
+    # Pipeline now creates the approval queue entry automatically
     return incident_id
 
 
