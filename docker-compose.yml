@@ -1,0 +1,50 @@
+services:
+  # ---- PostgreSQL (source of truth) ----------------------------------------
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: incidents
+      POSTGRES_USER: incidents
+      POSTGRES_PASSWORD: incidents
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U incidents"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ---- FastAPI application --------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Override DATABASE_URL to use the compose db service
+      DATABASE_URL: postgresql://incidents:incidents@db:5432/incidents
+      APP_ENV: production
+      EVIDENCE_ROOT: /data/evidence
+    volumes:
+      - evidence_data:/data/evidence
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  postgres_data:
+  evidence_data:
