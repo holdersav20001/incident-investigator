@@ -130,6 +130,12 @@ class SqlIncidentRepository:
         row.updated_at = datetime.now(tz=timezone.utc)
         self._session.commit()
 
+    def update_approval_status(self, incident_id: UUID, approval_status: str) -> None:
+        row = self._require(incident_id)
+        row.approval_status = approval_status
+        row.updated_at = datetime.now(tz=timezone.utc)
+        self._session.commit()
+
     # ------------------------------------------------------------------
     # Read operations
     # ------------------------------------------------------------------
