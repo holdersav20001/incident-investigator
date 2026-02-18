@@ -1,6 +1,6 @@
 # Project Status — Autonomous Data Incident Investigator
 
-## Current Week: 7
+## Current Week: 8
 
 ## Progress
 
@@ -10,12 +10,23 @@
 - [x] Week 4 — Agent Orchestration
 - [x] Week 5 — Observability & Monitoring
 - [x] Week 6 — API & Integration Layer
-- [ ] Week 7 — Testing, Quality & Security
+- [x] Week 7 — Testing, Quality & Security
 - [ ] Week 8 — Deployment & Production Readiness
 
 ---
 
 ## Summaries
+
+## Week 7 Summary
+
+Delivered Testing, Quality & Security using TDD (430 tests, all green):
+
+- **Pipeline approval queue fix** (`src/investigator/workflow/pipeline.py`) — `_step_approve` now calls `create_approval_queue_item` for human-review decisions, wiring the pipeline's `ApprovalDecision` into the DB-backed approvals table; fixes E2E approve/reject flows
+- **E2E HTTP lifecycle tests** (`tests/test_e2e/`) — 16 tests covering four full scenarios via HTTP: dev auto-approve (ingest→investigate→APPROVED→feedback), prod human-review (APPROVAL_REQUIRED→approve→APPROVED), prod rejection, and unsafe-plan auto-rejection
+- **Contract compliance tests** (`tests/test_contracts/`) — 23 tests that validate every API response field-by-field against `contracts.md`: ingest response, incident record, approval queue item, and error envelope (no extra fields, correct types, ISO datetime strings, no stack traces)
+- **Security hardening** (`src/investigator/evidence/local_file.py`) — `LocalFileEvidenceProvider` now resolves the job_dir and asserts it stays inside root, blocking path traversal attacks (`job_name='../../etc'`); 26 security tests covering input length limits, enum enforcement, special characters, and error response safety
+- **Postmortem generator** (`src/investigator/reporting/postmortem.py`) — `PostmortemGenerator.generate(IncidentRow)` produces a `Postmortem` dataclass with a `.markdown` property rendering an 8-section blameless postmortem; 39 tests validate all sections, data sourcing, graceful missing-blob handling, and disposition-specific action items
+- Committed in 4 incremental commits (727838d→f79a3df)
 
 ## Week 6 Summary
 
