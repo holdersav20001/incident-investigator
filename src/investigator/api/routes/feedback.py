@@ -5,21 +5,17 @@ POST /incidents/{incident_id}/feedback — submit outcome feedback.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from investigator.models.feedback import OutcomeType
 from investigator.repository.incident_repo import SqlIncidentRepository
+from investigator.api.deps import get_repo
 
 router = APIRouter()
-
-
-def _get_repo(request: Request) -> SqlIncidentRepository:
-    return request.app.state.repo  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -30,7 +26,6 @@ class FeedbackRequest(BaseModel):
     outcome: OutcomeType
     overrides: Optional[dict[str, Any]] = None
     reviewer_notes: Optional[str] = Field(default=None, max_length=4000)
-    timestamp: datetime
 
 
 class FeedbackResponse(BaseModel):
@@ -48,9 +43,8 @@ class FeedbackResponse(BaseModel):
     status_code=201,
 )
 def submit_feedback(
-    incident_id: UUID, body: FeedbackRequest, request: Request
+    incident_id: UUID, body: FeedbackRequest, repo: SqlIncidentRepository = Depends(get_repo)
 ) -> FeedbackResponse:
-    repo = _get_repo(request)
     try:
         repo.create_feedback(
             incident_id,

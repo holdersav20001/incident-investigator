@@ -10,16 +10,13 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from investigator.repository.incident_repo import SqlIncidentRepository
+from investigator.api.deps import get_repo
 
 router = APIRouter()
-
-
-def _get_repo(request: Request) -> SqlIncidentRepository:
-    return request.app.state.repo  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -51,8 +48,7 @@ class ApprovalDecisionResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.get("/approvals/pending", response_model=list[ApprovalQueueItemResponse], status_code=200)
-def list_pending(request: Request) -> list[ApprovalQueueItemResponse]:
-    repo = _get_repo(request)
+def list_pending(repo: SqlIncidentRepository = Depends(get_repo)) -> list[ApprovalQueueItemResponse]:
     items = repo.list_pending_approvals()
     return [
         ApprovalQueueItemResponse(
@@ -73,8 +69,7 @@ def list_pending(request: Request) -> list[ApprovalQueueItemResponse]:
     response_model=ApprovalDecisionResponse,
     status_code=200,
 )
-def approve(incident_id: UUID, body: ApprovalDecisionRequest, request: Request) -> ApprovalDecisionResponse:
-    repo = _get_repo(request)
+def approve(incident_id: UUID, body: ApprovalDecisionRequest, repo: SqlIncidentRepository = Depends(get_repo)) -> ApprovalDecisionResponse:
     try:
         repo.record_approval_decision(
             incident_id, approved=True, reviewer=body.reviewer, reviewer_note=body.reviewer_note
@@ -84,6 +79,11 @@ def approve(incident_id: UUID, body: ApprovalDecisionRequest, request: Request) 
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No pending approval for incident {incident_id}",
         )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        )
     return ApprovalDecisionResponse(incident_id=str(incident_id), status="approved")
 
 
@@ -92,8 +92,7 @@ def approve(incident_id: UUID, body: ApprovalDecisionRequest, request: Request) 
     response_model=ApprovalDecisionResponse,
     status_code=200,
 )
-def reject(incident_id: UUID, body: ApprovalDecisionRequest, request: Request) -> ApprovalDecisionResponse:
-    repo = _get_repo(request)
+def reject(incident_id: UUID, body: ApprovalDecisionRequest, repo: SqlIncidentRepository = Depends(get_repo)) -> ApprovalDecisionResponse:
     try:
         repo.record_approval_decision(
             incident_id, approved=False, reviewer=body.reviewer, reviewer_note=body.reviewer_note
@@ -102,5 +101,10 @@ def reject(incident_id: UUID, body: ApprovalDecisionRequest, request: Request) -
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No pending approval for incident {incident_id}",
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
         )
     return ApprovalDecisionResponse(incident_id=str(incident_id), status="rejected")

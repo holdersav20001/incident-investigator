@@ -155,8 +155,26 @@ class SqlIncidentRepository:
         reviewer: str,
         reviewer_note: str | None,
     ) -> None:
-        """Record the human reviewer's decision and transition the incident state."""
+        """Record the human reviewer's decision and transition the incident state.
+
+        Raises LookupError if no approval exists.
+        Raises ValueError if the approval is not in 'pending' status or the
+        incident is not in APPROVAL_REQUIRED state.
+        """
         item = self._require_approval(incident_id)
+        if item.status != "pending":
+            raise ValueError(
+                f"Approval for incident {incident_id} is already '{item.status}', cannot decide again"
+            )
+
+        # Read actual incident status instead of assuming APPROVAL_REQUIRED
+        row = self._require(incident_id)
+        actual_status = IncidentStatus(row.status)
+        if actual_status != IncidentStatus.APPROVAL_REQUIRED:
+            raise ValueError(
+                f"Incident {incident_id} is in '{actual_status}' state, expected APPROVAL_REQUIRED"
+            )
+
         now = datetime.now(tz=timezone.utc)
         item.status = "approved" if approved else "rejected"
         item.reviewer = reviewer
@@ -166,7 +184,12 @@ class SqlIncidentRepository:
 
         # Transition incident state through the state machine
         target = IncidentStatus.APPROVED if approved else IncidentStatus.REJECTED
-        self.record_transition(incident_id, IncidentStatus.APPROVAL_REQUIRED, target, actor=reviewer)
+        self.record_transition(incident_id, actual_status, target, actor=reviewer)
+
+        # Keep approval_status in sync (Fix #3 — reconcile with pipeline writes)
+        row.approval_status = "approved" if approved else "rejected"
+        row.updated_at = now
+        self._session.commit()
 
     def create_feedback(
         self,

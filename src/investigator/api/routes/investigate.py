@@ -7,23 +7,29 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from typing import Any, Optional
 
 from investigator.repository.incident_repo import SqlIncidentRepository
 from investigator.state.machine import IncidentStatus
 from investigator.workflow.pipeline import InvestigationPipeline
+from investigator.api.deps import get_repo
 
 router = APIRouter()
 
 
-def _get_repo(request: Request) -> SqlIncidentRepository:
-    return request.app.state.repo  # type: ignore[no-any-return]
+def _get_pipeline(request: Request, repo: SqlIncidentRepository) -> InvestigationPipeline:
+    """Build a pipeline using the per-request repo.
 
-
-def _get_pipeline(request: Request) -> InvestigationPipeline:
-    return request.app.state.pipeline  # type: ignore[no-any-return]
+    If app.state has a pre-built pipeline (tests), return that.
+    Otherwise, assemble from stored components with the per-request repo.
+    """
+    pre_built = getattr(request.app.state, "pipeline", None)
+    if pre_built is not None:
+        return pre_built
+    components = request.app.state.pipeline_components
+    return InvestigationPipeline(repo=repo, **components)
 
 
 def _get_metrics(request: Request):  # type: ignore[return]
@@ -62,8 +68,8 @@ class IncidentResponse(BaseModel):
     response_model=InvestigateResponse,
     status_code=200,
 )
-def investigate(incident_id: UUID, request: Request) -> InvestigateResponse:
-    pipeline = _get_pipeline(request)
+def investigate(incident_id: UUID, request: Request, repo: SqlIncidentRepository = Depends(get_repo)) -> InvestigateResponse:
+    pipeline = _get_pipeline(request, repo)
     metrics = _get_metrics(request)
     try:
         result = pipeline.run(incident_id=incident_id, metrics=metrics)
@@ -90,13 +96,19 @@ class IncidentListItem(BaseModel):
 
 @router.get("/incidents", response_model=list[IncidentListItem], status_code=200)
 def list_incidents(
-    request: Request,
+    repo: SqlIncidentRepository = Depends(get_repo),
     status: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[IncidentListItem]:
-    repo = _get_repo(request)
-    inc_status = IncidentStatus(status) if status else None
+    try:
+        inc_status = IncidentStatus(status) if status else None
+    except ValueError:
+        valid = [s.value for s in IncidentStatus]
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid status filter: {status}. Valid values: {valid}",
+        )
     rows = repo.list_incidents(status=inc_status, limit=limit, offset=offset)
     return [
         IncidentListItem(
@@ -112,8 +124,7 @@ def list_incidents(
 
 
 @router.get("/incidents/{incident_id}", response_model=IncidentResponse, status_code=200)
-def get_incident(incident_id: UUID, request: Request) -> IncidentResponse:
-    repo = _get_repo(request)
+def get_incident(incident_id: UUID, repo: SqlIncidentRepository = Depends(get_repo)) -> IncidentResponse:
     row = repo.get_incident(incident_id)
     if row is None:
         raise HTTPException(

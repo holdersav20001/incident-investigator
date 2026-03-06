@@ -1,17 +1,21 @@
 """FastAPI application factory.
 
-`create_app` accepts optional pre-built repo and pipeline so tests can
+`create_app` accepts optional pre-built dependencies so tests can
 inject in-memory SQLite-backed dependencies without patching globals.
+
+Production uses a session_factory to create per-request sessions.
+Tests may pass a pre-built repo (single session) for simplicity.
 """
 
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from investigator.repository.incident_repo import SqlIncidentRepository
@@ -37,15 +41,22 @@ def create_app(
     *,
     repo: Optional[SqlIncidentRepository] = None,
     pipeline: Optional["InvestigationPipeline"] = None,
+    pipeline_components: Optional[dict[str, Any]] = None,
     metrics: Optional["MetricsRegistry"] = None,
+    session_factory: Optional[Callable[[], Session]] = None,
 ) -> FastAPI:
     app = FastAPI(title="Incident Investigator", version="0.1.0")
 
-    # Attach dependencies to app state so routes can access via request.app.state
+    # Store session_factory for per-request session creation.
+    # If a pre-built repo is passed (tests), store it as a fallback.
+    if session_factory is not None:
+        app.state.session_factory = session_factory
     if repo is not None:
         app.state.repo = repo
     if pipeline is not None:
         app.state.pipeline = pipeline
+    if pipeline_components is not None:
+        app.state.pipeline_components = pipeline_components
     if metrics is not None:
         app.state.metrics = metrics
 

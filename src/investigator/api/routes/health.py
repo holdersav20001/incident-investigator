@@ -4,20 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from investigator.observability.slo import SLOChecker, STANDARD_SLOS
+from investigator.repository.incident_repo import SqlIncidentRepository
+from investigator.api.deps import get_repo
 
 router = APIRouter()
 
 
 def _get_metrics(request: Request):  # type: ignore[return]
     return getattr(request.app.state, "metrics", None)
-
-
-def _get_repo(request: Request):  # type: ignore[return]
-    return getattr(request.app.state, "repo", None)
 
 
 class SLOSummary(BaseModel):
@@ -34,15 +32,13 @@ class HealthResponse(BaseModel):
 
 
 @router.get("/health", response_model=HealthResponse, status_code=200)
-def health_check(request: Request) -> HealthResponse:
+def health_check(request: Request, repo: SqlIncidentRepository = Depends(get_repo)) -> HealthResponse:
     # DB ping
-    repo = _get_repo(request)
     db_status = "ok"
-    if repo is not None:
-        try:
-            repo._session.execute(__import__("sqlalchemy").text("SELECT 1"))
-        except Exception:  # noqa: BLE001
-            db_status = "error"
+    try:
+        repo._session.execute(__import__("sqlalchemy").text("SELECT 1"))
+    except Exception:  # noqa: BLE001
+        db_status = "error"
 
     # SLO evaluation
     metrics = _get_metrics(request)

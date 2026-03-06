@@ -19,7 +19,6 @@ import os
 from pathlib import Path
 
 import uvicorn
-from sqlalchemy.orm import Session
 
 from investigator.api.app import create_app
 from investigator.approval.policy import ApprovalPolicy
@@ -34,9 +33,7 @@ from investigator.llm.mock import MockLLMProvider
 from investigator.observability.metrics import MetricsRegistry
 from investigator.remediation.planner import RemediationPlanner
 from investigator.remediation.simulator import PlanSimulator
-from investigator.repository.incident_repo import SqlIncidentRepository
 from investigator.risk.engine import RiskEngine
-from investigator.workflow.pipeline import InvestigationPipeline
 
 
 def _build_llm(settings: Settings) -> LLMProvider:
@@ -112,26 +109,28 @@ def build_app(settings: Settings | None = None):
     # In production, schema is managed by Alembic: `alembic upgrade head`
     Base.metadata.create_all(engine)
 
-    session_factory = get_session_factory(engine)
-    session: Session = session_factory()
-
-    repo = SqlIncidentRepository(session)
+    sf = get_session_factory(engine)
     metrics = MetricsRegistry()
     evidence = LocalFileEvidenceProvider(Path(s.EVIDENCE_ROOT))
     llm = _build_llm(s)
 
-    pipeline = InvestigationPipeline(
-        repo=repo,
-        classifier=RulesClassifier(),
-        evidence_provider=evidence,
-        diagnosis_engine=DiagnosisEngine(llm),
-        remediation_planner=RemediationPlanner(llm),
-        plan_simulator=PlanSimulator(),
-        risk_engine=RiskEngine(),
-        approval_policy=ApprovalPolicy(),
-    )
+    # Store pipeline components — the pipeline itself is assembled per-request
+    # with a fresh repo (per-request session) by the investigate route.
+    pipeline_components = {
+        "classifier": RulesClassifier(),
+        "evidence_provider": evidence,
+        "diagnosis_engine": DiagnosisEngine(llm),
+        "remediation_planner": RemediationPlanner(llm),
+        "plan_simulator": PlanSimulator(),
+        "risk_engine": RiskEngine(),
+        "approval_policy": ApprovalPolicy(),
+    }
 
-    return create_app(repo=repo, pipeline=pipeline, metrics=metrics)
+    return create_app(
+        session_factory=sf,
+        pipeline_components=pipeline_components,
+        metrics=metrics,
+    )
 
 
 if __name__ == "__main__":

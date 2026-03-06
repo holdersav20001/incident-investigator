@@ -11,9 +11,11 @@
 
 - **Language**: Python 3.11+
 - **Style**: Follow PEP 8, use type hints
-- **Testing**: Write tests for all new functions
+- **Testing**: Write tests for all new functions, including negative tests for every user-facing input (invalid enums, missing fields, boundary values)
 - **Comments**: Explain "why" not "what"
-- **Error handling**: Always include try/catch where appropriate
+- **Error handling**: Every API route must catch exceptions that can arise from user input (ValueError, KeyError, enum coercion) and return a 4xx response. Never let unhandled exceptions reach the client as 500s.
+- **Database sessions**: Always use per-request sessions via FastAPI `Depends` with `yield`. Never share a session across requests.
+- **Shared state**: When modifying a field that is written by more than one code path (e.g. `approval_status`), grep for ALL other writers and ensure consistency. Write a cross-cutting test.
 
 ## When to Ask
 
@@ -30,8 +32,9 @@ Otherwise: **JUST DO IT** ✅
 **At the start of every session (do this before anything else):**
 
 1. Read `STATUS.md` to find the current week and what has been completed
-2. Read `WEEK0X_PROMPT.md` and `WEEK0X_PLAN.md` for the current week (replace `0X` with the current week number)
-3. Continue from where the previous session left off — do not restart completed work
+2. Read `INVARIANTS.md` — these are system-wide rules that must hold across all code. Verify new work does not violate them.
+3. Read `WEEK0X_PROMPT.md` and `WEEK0X_PLAN.md` for the current week (replace `0X` with the current week number)
+4. Continue from where the previous session left off — do not restart completed work
 
 **When a week is complete (all tests passing, CI green, commits done):**
 
