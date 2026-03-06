@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
 
 // ---------------------------------------------------------------------------
@@ -390,25 +390,20 @@ function SimulationDetail({ data }) {
 
 function RiskDetail({ data }) {
   if (!data) return null
+  // API returns risk_score / risk_level (snake_case from Pydantic model)
+  const score = data.risk_score ?? data.score
+  const level = data.risk_level ?? data.level
   return (
     <>
       <KV label="Score">
-        <ProgressBar value={data.score} color={RISK_COLOR[data.level] || '#6b7280'} />
+        <ProgressBar value={score} color={RISK_COLOR[level] || '#6b7280'} />
       </KV>
       <KV label="Level">
-        <Badge label={data.level} color={RISK_COLOR[data.level] || '#6b7280'} />
+        <Badge label={level} color={RISK_COLOR[level] || '#6b7280'} />
       </KV>
-      {data.factors && Object.keys(data.factors).length > 0 && (
-        <KV label="Factors">
-          <div className="risk-factors">
-            {Object.entries(data.factors).map(([k, v]) => (
-              <div key={k} className="risk-factor">
-                <span>{k.replace(/_/g, ' ')}</span>
-                <span className="factor-val">{typeof v === 'number' ? `+${v}` : String(v)}</span>
-              </div>
-            ))}
-          </div>
-        </KV>
+      {data.rationale && <div className="reasoning">{data.rationale}</div>}
+      {data.recommendation && (
+        <KV label="Recommendation">{data.recommendation.replace(/_/g, ' ')}</KV>
       )}
     </>
   )
@@ -618,8 +613,43 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [view, setView] = useState('form')
 
+  // Load existing incidents from the API when the app first mounts
+  useEffect(() => {
+    fetch('/incidents?limit=50')
+      .then(r => r.json())
+      .then(items => {
+        if (Array.isArray(items)) {
+          // items are IncidentListItem stubs — mark them so we know to fetch
+          // full details on click
+          setHistory(items.map(i => ({ ...i, _stub: true })))
+        }
+      })
+      .catch(() => {}) // silently ignore if API is down
+  }, [])
+
+  async function handleSelect(inc) {
+    setView('result')
+    if (!inc._stub) {
+      // Already have full details (submitted in this session)
+      setSelected(inc)
+      return
+    }
+    // Fetch full incident detail for sidebar items loaded from the API
+    try {
+      const res = await fetch(`/incidents/${inc.incident_id}`)
+      const detail = await res.json()
+      setSelected({ ...detail, job_name: inc.job_name, source: inc.source })
+    } catch {
+      setSelected(inc) // fall back to stub on network error
+    }
+  }
+
   function handleResult(incident) {
-    setHistory(prev => [incident, ...prev])
+    // Prepend the new investigation; remove any stub for the same id if present
+    setHistory(prev => [
+      incident,
+      ...prev.filter(i => i.incident_id !== incident.incident_id),
+    ])
     setSelected(incident)
     setLoading(false)
     setView('result')
@@ -636,7 +666,7 @@ export default function App() {
         <Sidebar
           history={history}
           selectedId={selected?.incident_id}
-          onSelect={inc => { setSelected(inc); setView('result') }}
+          onSelect={handleSelect}
           onNew={() => { setView('form'); setSelected(null) }}
         />
 

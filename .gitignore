@@ -1,4 +1,7 @@
-.claude/skills/
+# Claude Code local settings
+.claude/
+
+# Python
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -7,8 +10,21 @@ dist/
 build/
 .venv/
 venv/
-.env
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Environment / secrets
+.env
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
 *.log
+
+# Week planning files (dev workflow only)
+WEEK*_PLAN.md
+WEEK*_PROMPT.md
