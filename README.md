@@ -10,161 +10,177 @@ Built with **Python 3.11+**, **FastAPI**, **SQLAlchemy**, **Pydantic v2**, and a
 
 When a data pipeline fails, Incident Investigator automatically runs a 6-step investigation pipeline:
 
-```
-┌─────────────┐    ┌────────────┐    ┌───────────┐    ┌────────────┐    ┌──────────┐    ┌──────────┐
-│  Classify    │───▶│  Diagnose   │───▶│ Remediate  │───▶│  Simulate  │───▶│   Risk   │───▶│ Approve  │
-│  (rules)     │    │  (LLM)      │    │  (LLM)     │    │  (determ.) │    │ (determ.)│    │ (policy) │
-└─────────────┘    └────────────┘    └───────────┘    └────────────┘    └──────────┘    └──────────┘
-   Keywords &         Root-cause        Step-by-step      SQL safety       0-100 score     auto_approve
-   confidence         analysis          plan + rollback   checks           LOW/MED/HIGH    human_review
-                                                                                           reject
+```mermaid
+flowchart LR
+    A["1. Classify\n(rules)"] --> B["2. Diagnose\n(LLM)"]
+    B --> C["3. Remediate\n(LLM)"]
+    C --> D["4. Simulate\n(deterministic)"]
+    D --> E["5. Risk Score\n(deterministic)"]
+    E --> F["6. Approve\n(policy)"]
+
+    style A fill:#4CAF50,color:#fff
+    style B fill:#2196F3,color:#fff
+    style C fill:#2196F3,color:#fff
+    style D fill:#4CAF50,color:#fff
+    style E fill:#4CAF50,color:#fff
+    style F fill:#FF9800,color:#fff
 ```
 
-**Key principle:** LLMs propose, deterministic code validates and gates. No remediation is ever executed automatically — plans require human approval for production incidents.
+> **Key principle:** LLMs propose, deterministic code validates and gates. No remediation is ever executed automatically — plans require human approval for production incidents.
 
 ---
 
 ## Architecture
 
-```
-                    ┌──────────────────────────────────────────────────┐
-                    │              Docker Compose Stack                │
-                    │                                                  │
- ┌────────┐        │  ┌─────────────┐    ┌────────────────────────┐  │
- │  React  │──HTTP──│─▶│  FastAPI    │───▶│  Investigation Pipeline │  │
- │   UI    │        │  │  (port 8000)│    │                        │  │
- └────────┘        │  └──────┬──────┘    │  classify ──▶ diagnose  │  │
-                    │         │           │  remediate ──▶ simulate │  │
- ┌────────┐        │         │           │  risk ──▶ approve       │  │
- │ On-call │──HTTP──│─────────┘           └───────────┬────────────┘  │
- │Engineer │        │                                  │               │
- └────────┘        │  ┌──────────────┐    ┌───────────▼──────────┐   │
-                    │  │  PostgreSQL   │◀───│  SQLAlchemy ORM      │   │
-                    │  │  (port 5432)  │    │  + Alembic migrations│   │
-                    │  └──────────────┘    └──────────────────────┘   │
-                    │                                  │               │
-                    │                       ┌──────────▼──────────┐   │
-                    │                       │   LLM Provider       │   │
-                    │                       │  (Anthropic/OpenRouter│   │
-                    │                       │   /Mock for CI)      │   │
-                    │                       └─────────────────────┘   │
-                    └──────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Users
+        UI["React UI\n(Vite SPA)"]
+        Eng["On-call Engineer"]
+    end
+
+    subgraph Compose["Docker Compose Stack"]
+        API["FastAPI\n:8000"]
+        subgraph Pipeline["Investigation Pipeline"]
+            CL["Classify"] --> DX["Diagnose"]
+            DX --> REM["Remediate"]
+            REM --> SIM["Simulate"]
+            SIM --> RSK["Risk"]
+            RSK --> APR["Approve"]
+        end
+        DB[("PostgreSQL\n:5432")]
+        ALE["Alembic\nMigrations"]
+    end
+
+    LLM["LLM Provider\n(Anthropic / OpenRouter / Mock)"]
+
+    UI -->|HTTP| API
+    Eng -->|HTTP| API
+    API --> Pipeline
+    Pipeline --> DB
+    ALE --> DB
+    DX -->|structured JSON| LLM
+    REM -->|structured JSON| LLM
+
+    style LLM fill:#2196F3,color:#fff
+    style DB fill:#FF9800,color:#fff
+    style API fill:#4CAF50,color:#fff
 ```
 
 ---
 
 ## Sequence Diagram — Full Investigation Flow
 
-```
-  Incident Source          FastAPI             Pipeline            LLM Provider        Postgres
-       │                     │                    │                     │                 │
-       │  POST /events/ingest│                    │                     │                 │
-       │────────────────────▶│                    │                     │                 │
-       │                     │  create incident   │                     │                 │
-       │                     │───────────────────────────────────────────────────────────▶│
-       │                     │  201 Created       │                     │                 │
-       │◀────────────────────│                    │                     │                 │
-       │                     │                    │                     │                 │
-       │         POST /incidents/{id}/investigate │                     │                 │
-       │────────────────────▶│                    │                     │                 │
-       │                     │  run pipeline      │                     │                 │
-       │                     │───────────────────▶│                     │                 │
-       │                     │                    │                     │                 │
-       │                     │                    │  1. CLASSIFY        │                 │
-       │                     │                    │  (keyword rules)    │                 │
-       │                     │                    │─────────────────────────────────────▶│
-       │                     │                    │  persist classification              │
-       │                     │                    │                     │                 │
-       │                     │                    │  2. FETCH EVIDENCE  │                 │
-       │                     │                    │  (local files, SHA-256 hash)         │
-       │                     │                    │                     │                 │
-       │                     │                    │  3. DIAGNOSE        │                 │
-       │                     │                    │────────────────────▶│                 │
-       │                     │                    │  DiagnosisResult    │                 │
-       │                     │                    │◀────────────────────│                 │
-       │                     │                    │─────────────────────────────────────▶│
-       │                     │                    │  persist diagnosis                   │
-       │                     │                    │                     │                 │
-       │                     │                    │  4. REMEDIATE       │                 │
-       │                     │                    │────────────────────▶│                 │
-       │                     │                    │  RemediationPlan    │                 │
-       │                     │                    │◀────────────────────│                 │
-       │                     │                    │                     │                 │
-       │                     │                    │  5. SIMULATE        │                 │
-       │                     │                    │  (deterministic     │                 │
-       │                     │                    │   SQL safety check) │                 │
-       │                     │                    │─────────────────────────────────────▶│
-       │                     │                    │  persist simulation                  │
-       │                     │                    │                     │                 │
-       │                     │                    │  6. RISK + APPROVE  │                 │
-       │                     │                    │  (score 0-100,      │                 │
-       │                     │                    │   route decision)   │                 │
-       │                     │                    │─────────────────────────────────────▶│
-       │                     │                    │  persist risk + approval             │
-       │                     │                    │                     │                 │
-       │                     │  PipelineResult    │                     │                 │
-       │                     │◀───────────────────│                     │                 │
-       │  200 OK (full result)                    │                     │                 │
-       │◀────────────────────│                    │                     │                 │
-       │                     │                    │                     │                 │
-  ┌────┴─── If APPROVAL_REQUIRED ────────────────────────────────────────────────────────┐
-  │    │                     │                    │                     │                 │
-  │    │  POST /approvals/{id}/approve            │                     │                 │
-  │    │────────────────────▶│  transition ──▶ APPROVED ──────────────────────────────▶│ │
-  │    │                     │                    │                     │                 │
-  └──────────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Src as Incident Source
+    participant API as FastAPI
+    participant DB as PostgreSQL
+    participant Pipe as Pipeline
+    participant LLM as LLM Provider
+
+    Src->>API: POST /events/ingest
+    API->>DB: Create incident (RECEIVED)
+    API-->>Src: 201 Created
+
+    Src->>API: POST /incidents/{id}/investigate
+    API->>Pipe: run(incident_id)
+
+    rect rgb(200, 230, 200)
+        Note over Pipe: Step 1 — Classify (deterministic)
+        Pipe->>Pipe: Keyword rules + confidence score
+        Pipe->>DB: Persist classification → CLASSIFIED
+    end
+
+    rect rgb(200, 230, 200)
+        Note over Pipe: Step 2 — Fetch Evidence
+        Pipe->>Pipe: Local files + SHA-256 hash
+    end
+
+    rect rgb(200, 210, 240)
+        Note over Pipe,LLM: Step 3 — Diagnose (LLM)
+        Pipe->>LLM: Structured prompt (event + classification + evidence)
+        LLM-->>Pipe: DiagnosisResult (JSON)
+        Pipe->>DB: Persist diagnosis → DIAGNOSED
+    end
+
+    rect rgb(200, 210, 240)
+        Note over Pipe,LLM: Step 4 — Remediate (LLM)
+        Pipe->>LLM: Structured prompt (diagnosis context)
+        LLM-->>Pipe: RemediationPlan (JSON)
+    end
+
+    rect rgb(200, 230, 200)
+        Note over Pipe: Step 5 — Simulate (deterministic)
+        Pipe->>Pipe: SQL safety checks (SELECT only, no DML/DDL)
+        Pipe->>DB: Persist simulation → REMEDIATION_PROPOSED
+    end
+
+    rect rgb(255, 235, 200)
+        Note over Pipe: Step 6 — Risk + Approve (deterministic)
+        Pipe->>Pipe: Score 0-100, route decision
+        Pipe->>DB: Persist risk + approval → RISK_ASSESSED
+    end
+
+    Pipe-->>API: PipelineResult
+    API-->>Src: 200 OK (full result)
+
+    opt If APPROVAL_REQUIRED
+        Src->>API: POST /approvals/{id}/approve
+        API->>DB: Transition → APPROVED
+        API-->>Src: 200 OK
+    end
 ```
 
 ---
 
 ## Approval Routing Logic
 
-```
-                              ┌─────────────────┐
-                              │  Risk Assessment │
-                              │  (score 0-100)   │
-                              └────────┬────────┘
-                                       │
-                    ┌──────────────────┼──────────────────┐
-                    │                  │                   │
-               score < 30        30 ≤ score < 70     score ≥ 70
-                    │                  │               or sim fail
-                    ▼                  ▼                   ▼
-             ┌────────────┐    ┌─────────────┐    ┌────────────┐
-             │    LOW      │    │   MEDIUM     │    │    HIGH    │
-             │ auto_approve│    │ human_review │    │   reject   │
-             └──────┬─────┘    └──────┬──────┘    └─────┬──────┘
-                    │                  │                  │
-                    ▼                  ▼                  ▼
-              ┌──────────┐    ┌──────────────┐    ┌──────────┐
-              │ APPROVED  │    │  APPROVAL    │    │ REJECTED  │
-              │           │    │  REQUIRED    │    │           │
-              └──────────┘    │              │    └──────────┘
-                              │  on_call_eng │
-                              │  or platform │
-                              │  lead reviews│
-                              └──────────────┘
+```mermaid
+flowchart TD
+    RISK["Risk Assessment\n(score 0–100)"]
+
+    RISK -->|"score < 30"| LOW["LOW"]
+    RISK -->|"30 ≤ score < 70"| MED["MEDIUM"]
+    RISK -->|"score ≥ 70\nor simulation failed"| HIGH["HIGH"]
+
+    LOW -->|auto_approve| APPROVED["APPROVED"]
+    MED -->|human_review| PENDING["APPROVAL_REQUIRED\n(on_call_engineer\nor data_platform_lead)"]
+    HIGH -->|reject| REJECTED["REJECTED"]
+
+    PENDING -->|engineer approves| APPROVED
+    PENDING -->|engineer rejects| REJECTED
+
+    style LOW fill:#4CAF50,color:#fff
+    style MED fill:#FF9800,color:#fff
+    style HIGH fill:#f44336,color:#fff
+    style APPROVED fill:#4CAF50,color:#fff
+    style REJECTED fill:#f44336,color:#fff
+    style PENDING fill:#FF9800,color:#fff
 ```
 
 ---
 
 ## State Machine
 
-Every incident transitions through a strict, deterministic state machine:
+Every incident transitions through a strict, deterministic state machine. Only allowlisted `(from, to)` transitions are permitted — invalid transitions raise errors.
 
-```
-  RECEIVED ──▶ CLASSIFIED ──▶ DIAGNOSED ──▶ REMEDIATION_PROPOSED ──▶ RISK_ASSESSED
-                                                                          │
-                                           ┌──────────────────────────────┤
-                                           │              │               │
-                                           ▼              ▼               ▼
-                                       APPROVED   APPROVAL_REQUIRED   REJECTED
-                                                        │  │
-                                                        │  └──▶ REJECTED
-                                                        └─────▶ APPROVED
-```
+```mermaid
+stateDiagram-v2
+    [*] --> RECEIVED
+    RECEIVED --> CLASSIFIED
+    CLASSIFIED --> DIAGNOSED
+    DIAGNOSED --> REMEDIATION_PROPOSED
+    REMEDIATION_PROPOSED --> RISK_ASSESSED
 
-Only allowlisted `(from, to)` transitions are permitted. Invalid transitions raise errors.
+    RISK_ASSESSED --> APPROVED
+    RISK_ASSESSED --> APPROVAL_REQUIRED
+    RISK_ASSESSED --> REJECTED
+
+    APPROVAL_REQUIRED --> APPROVED
+    APPROVAL_REQUIRED --> REJECTED
+```
 
 ---
 
