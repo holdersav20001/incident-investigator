@@ -13,10 +13,30 @@
 - [x] Week 7 — Testing, Quality & Security
 - [x] Week 8 — Deployment & Production Readiness
 - [x] Week 9 — Infrastructure Convergence (Integration Tests + Dev Scripts)
+- [x] Week 10 — LLM Integration, React UI & Realistic Scenarios
+
+---
+
+## Current Week: Complete
 
 ---
 
 ## Summaries
+
+## Week 10 Summary
+
+Delivered LLM integration, React UI, and realistic end-to-end demo scenarios:
+
+- **OpenRouterLLMProvider** (`src/investigator/llm/openrouter_provider.py`) — OpenAI-compatible client pointed at `https://openrouter.ai/api/v1`; JSON schema injected into system prompt; markdown code-fence stripping; exponential-backoff retry on `RateLimitError` (4 retries: 15→30→60→120s); `max_tokens=2048` to prevent plan truncation
+- **Settings** (`src/investigator/config.py`) — added `OPENROUTER_API_KEY` and `OPENROUTER_MODEL`; `openrouter` branch wired in `main.py _build_llm()`; mock provider ships default `DiagnosisResult` + `RemediationPlan` so the full pipeline completes without any API key
+- **React UI** (`ui/`) — Vite+React SPA; `EventForm` submits ingest → investigate → fetch; `PipelineView` renders all 6 steps (classification, diagnosis, remediation, simulation, risk, decision) with complete/failed/skipped states; sidebar loads existing incidents from `GET /incidents` on page load; Vite proxy avoids CORS
+- **Sequence diagram** (`docs/sequence.md`) — Mermaid diagram covering all actors, 3 API calls, 6 colour-coded pipeline steps, and the optional human-approval branch
+- **Realistic incident scenarios** (`evidence/` + `scripts/run_scenarios.py`) — three evidence log files with genuine stack traces, schema diffs, and timing data passed verbatim to the LLM diagnosis prompt:
+  - `cdc_orders` — PySpark/Kafka schema mismatch (`user_id` missing in Redshift target)
+  - `etl_customers` — Postgres sequential scan timeout (89M rows, no index on `orders.customer_id`)
+  - `fact_sales_daily` — dbt not-null failure (1,243 NULLs all from Klarna webhook v2 API change)
+- All three incidents complete the full pipeline to `APPROVAL_REQUIRED` (risk 30–40/100, MEDIUM, `pending:on_call_engineer`), proving log file content materially changes LLM diagnosis vs `(no evidence available)`
+- Committed: `822b52d`
 
 ## Week 9 Summary
 
